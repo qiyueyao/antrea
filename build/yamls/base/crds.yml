@@ -301,6 +301,8 @@ spec:
                             cidr:
                               type: string
                               format: cidr
+                  enableLogging:
+                    type: boolean
             egress:
               type: array
               items:
@@ -336,3 +338,5 @@ spec:
                             cidr:
                               type: string
                               format: cidr
+                  enableLogging:
+                    type: boolean
