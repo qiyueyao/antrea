@@ -530,6 +530,7 @@ func (n *NetworkPolicyController) processNetworkPolicy(np *networkingv1.NetworkP
 			Services:  toAntreaServices(ingressRule.Ports),
 			Priority:  defaultRulePriority,
 			Action:    &defaultAction,
+			EnableLogging: false,
 		})
 	}
 	// Compute NetworkPolicyRule for Egress Rule.
@@ -541,6 +542,7 @@ func (n *NetworkPolicyController) processNetworkPolicy(np *networkingv1.NetworkP
 			Services:  toAntreaServices(egressRule.Ports),
 			Priority:  defaultRulePriority,
 			Action:    &defaultAction,
+			EnableLogging: false,
 		})
 	}
 
