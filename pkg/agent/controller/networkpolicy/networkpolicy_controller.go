@@ -35,6 +35,7 @@ import (
 )
 
 const (
+	controllerName = "NetworkPolicyController"
 	// How long to wait before retrying the processing of a network policy change.
 	minRetryDelay = 5 * time.Second
 	maxRetryDelay = 300 * time.Second
@@ -69,6 +70,8 @@ type Controller struct {
 	// reconciler provides interfaces to reconcile the desired state of
 	// NetworkPolicy rules with the actual state of Openflow entries.
 	reconciler Reconciler
+	// include openflow client to register packetin for logging
+	ofClient openflow.Client
 
 	networkPolicyWatcher  *watcher
 	appliedToGroupWatcher *watcher
@@ -86,6 +89,7 @@ func NewNetworkPolicyController(antreaClientGetter agent.AntreaClientProvider,
 		antreaClientProvider: antreaClientGetter,
 		queue:                workqueue.NewNamedRateLimitingQueue(workqueue.NewItemExponentialFailureRateLimiter(minRetryDelay, maxRetryDelay), "networkpolicyrule"),
 		reconciler:           newReconciler(ofClient, ifaceStore),
+		ofClient:             ofClient,
 	}
 	c.ruleCache = newRuleCache(c.enqueueRule, podUpdates)
 	// Create a WaitGroup that is used to block network policy workers from asynchronously processing
@@ -93,6 +97,9 @@ func NewNetworkPolicyController(antreaClientGetter agent.AntreaClientProvider,
 	// solution to a deterministic mechanism for when to cleanup flows from previous round.
 	// Wait until appliedToGroupWatcher, addressGroupWatcher and networkPolicyWatcher to receive bookmark event.
 	c.fullSyncGroup.Add(3)
+
+	// Register packetInHandler
+	c.ofClient.RegisterPacketInHandler("cnpLogging", c)
 
 	// Use nodeName to filter resources when watching resources.
 	options := metav1.ListOptions{
