@@ -34,7 +34,7 @@ const (
 	// Name for traceflow PacketInHandler
 	tfPacketHandlerName = "traceflow"
 	// Name for CNP Logging PacketInHandler
-	cnpPacketHandlerName = "cnpLogging"
+	npPacketHandlerName = "networkpolicy"
 	// Max packetInQueue size.
 	packetInQueueSize int = 256
 )
@@ -63,14 +63,14 @@ func (c *client) StartPacketInHandler(stopCh <-chan struct{}) {
 	go c.parsePacketIn(packetInQueue, stopCh, tfPacketHandlerName)
 
 	// Subscribe packetin for CNP Logging with reason 2
-	chCNP := make(chan *ofctrl.PacketIn)
-	err = c.SubscribePacketIn(uint8(ofcnpAction), chCNP)
+	chNP := make(chan *ofctrl.PacketIn)
+	err = c.SubscribePacketIn(uint8(ofcnpAction), chNP)
 	if err != nil {
 		klog.Errorf("Subscribe PacketIn failed %+v", err)
 		return
 	}
-	cnpPacketInQueue :=workqueue.NewNamed("cnpPacketIn")
-	go c.parsePacketIn(cnpPacketInQueue, stopCh, cnpPacketHandlerName)
+	npPacketInQueue :=workqueue.NewNamed("cnpPacketIn")
+	go c.parsePacketIn(npPacketInQueue, stopCh, npPacketHandlerName)
 
 	for {
 		select {
@@ -84,7 +84,7 @@ func (c *client) StartPacketInHandler(stopCh <-chan struct{}) {
 			}
 		case <-stopCh:
 			packetInQueue.ShutDown()
-			cnpPacketInQueue.ShutDown()
+			npPacketInQueue.ShutDown()
 			break
 		}
 	}

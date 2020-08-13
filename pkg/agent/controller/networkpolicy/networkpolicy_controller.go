@@ -35,7 +35,6 @@ import (
 )
 
 const (
-	controllerName = "NetworkPolicyController"
 	// How long to wait before retrying the processing of a network policy change.
 	minRetryDelay = 5 * time.Second
 	maxRetryDelay = 300 * time.Second
@@ -99,7 +98,7 @@ func NewNetworkPolicyController(antreaClientGetter agent.AntreaClientProvider,
 	c.fullSyncGroup.Add(3)
 
 	// Register packetInHandler
-	c.ofClient.RegisterPacketInHandler("cnpLogging", c)
+	c.ofClient.RegisterPacketInHandler("networkpolicy", c)
 
 	// Use nodeName to filter resources when watching resources.
 	options := metav1.ListOptions{
