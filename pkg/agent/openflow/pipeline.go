@@ -883,8 +883,13 @@ func (c *client) conjunctionActionFlow(conjunctionID uint32, tableID binding.Tab
 		ofPriority = *priority
 	}
 	conjReg := IngressReg
-	if tableID >= EmergencyEgressRuleTable && tableID <= EgressRuleTable   {
+	if tableID == EgressRuleTable   {
 		conjReg = EgressReg
+	}
+	for _, table := range GetCNPEgressTables() {
+		if tableID == table {
+			conjReg = EgressReg
+		}
 	}
 	if enableLogging {
 		return c.pipeline[tableID].BuildFlow(ofPriority).MatchProtocol(binding.ProtocolIP).
@@ -930,6 +935,7 @@ func (c *client) conjunctionActionDropLogFlow(conjunctionID uint32, tableID bind
 		MatchPriority(ofPriority).
 		Action().LoadRegRange(int(conjReg), conjunctionID, binding.Range{0, 31}).
 		Action().SendToController(2).
+		Action().Drop().
 		Cookie(c.cookieAllocator.Request(cookie.Policy).Raw()).
 		Done()
 }
