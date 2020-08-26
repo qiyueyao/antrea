@@ -30,7 +30,7 @@ const (
 	// Action explicitly output to controller.
 	ofprAction ofpPacketInReason = 1
 	// Action output to cluster network policy controller.
-	ofcnpAction ofpPacketInReason = 2
+	ofnpAction ofpPacketInReason = 2
 	// Name for traceflow PacketInHandler
 	tfPacketHandlerName = "traceflow"
 	// Name for CNP Logging PacketInHandler
@@ -63,8 +63,8 @@ func (c *client) StartPacketInHandler(stopCh <-chan struct{}) {
 	go c.parsePacketIn(packetInQueue, stopCh, tfPacketHandlerName)
 
 	// Subscribe packetin for CNP Logging with reason 2
-	chNP := make(chan *ofctrl.PacketIn)
-	err = c.SubscribePacketIn(uint8(ofcnpAction), chNP)
+	npCh := make(chan *ofctrl.PacketIn)
+	err = c.SubscribePacketIn(uint8(ofnpAction), npCh)
 	if err != nil {
 		klog.Errorf("Subscribe PacketIn failed %+v", err)
 		return
@@ -82,6 +82,8 @@ func (c *client) StartPacketInHandler(stopCh <-chan struct{}) {
 			} else {
 				klog.Warningf("Max packetInQueue size exceeded.")
 			}
+		case npPktIn := <-npCh:
+			npPacketInQueue.Add(npPktIn)
 		case <-stopCh:
 			packetInQueue.ShutDown()
 			npPacketInQueue.ShutDown()

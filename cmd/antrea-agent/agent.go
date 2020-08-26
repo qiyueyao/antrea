@@ -238,7 +238,7 @@ func run(o *Options) error {
 	}
 	go apiServer.Run(stopCh)
 
-	if features.DefaultFeatureGate.Enabled(features.Traceflow) {
+	if features.DefaultFeatureGate.Enabled(features.Traceflow) || features.DefaultFeatureGate.Enabled(features.ClusterNetworkPolicy) {
 		go ofClient.StartPacketInHandler(stopCh)
 	}
 
