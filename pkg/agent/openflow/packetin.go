@@ -86,7 +86,6 @@ func (c *client) StartPacketInHandler(stopCh <-chan struct{}) {
 			npPacketInQueue.Add(npPktIn)
 		case <-stopCh:
 			packetInQueue.ShutDown()
-			npPacketInQueue.ShutDown()
 			break
 		}
 	}

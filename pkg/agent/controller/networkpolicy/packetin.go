@@ -17,6 +17,8 @@ package networkpolicy
 import (
 	"errors"
 	"fmt"
+	"github.com/contiv/libOpenflow/protocol"
+	"net"
 
 	"github.com/contiv/libOpenflow/openflow13"
 	"github.com/contiv/ofnet/ofctrl"
@@ -36,18 +38,26 @@ func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
 	tableID := binding.TableIDType(pktIn.TableId)
 
 	ob := new(opsv1alpha1.Observation)
-	if tableID >= openflow.EmergencyEgressRuleTable && tableID <= openflow.ApplicationEgressRuleTable {
-		match = getMatchRegField(matchers, uint32(openflow.EgressReg))
-		ob.Action = opsv1alpha1.Forwarded
-	} else if tableID >= openflow.EmergencyIngressRuleTable && tableID <= openflow.ApplicationIngressRuleTable {
-		match = getMatchRegField(matchers, uint32(openflow.IngressReg))
-		ob.Action = opsv1alpha1.Forwarded
-	} else if tableID == openflow.EgressDefaultTable {
-		match = getMatchRegField(matchers, uint32(openflow.EgressReg))
-		ob.Action = opsv1alpha1.Dropped
-	} else if  tableID == openflow.IngressDefaultTable {
-		match = getMatchRegField(matchers, uint32(openflow.IngressReg))
-		ob.Action = opsv1alpha1.Dropped
+	// Get ingress/egress reg
+	for _, table := range openflow.GetCNPEgressTables() {
+		if tableID == table {
+			match = getMatchRegField(matchers, uint32(openflow.EgressReg))
+		}
+	}
+	for _, table := range openflow.GetCNPIngressTables() {
+		if tableID == table {
+			match = getMatchRegField(matchers, uint32(openflow.IngressReg))
+		}
+	}
+
+	// Collect Service DNAT.
+	if pktIn.Data.Ethertype == 0x800 {
+		ipPacket, ok := pktIn.Data.Data.(*protocol.IPv4)
+		if !ok {
+			return errors.New("invalid IPv4 packet")
+		}
+		ob.TranslatedSrcIP = ipPacket.NWSrc.String()
+		ob.TranslatedDstIP = ipPacket.NWDst.String()
 	}
 
 	ob.Component = opsv1alpha1.NetworkPolicy
@@ -62,7 +72,7 @@ func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
 		ob.NetworkPolicy = fmt.Sprintf("%s/%s", npNamespace, npName)
 	}
 
-	klog.Infof(fmt.Sprintf("%s %s %s in %s", ob.Component, ob.NetworkPolicy, ob.Action, ob.ComponentInfo))
+	klog.Infof(fmt.Sprintf("%s %s SRC: %s DEST: %s", ob.ComponentInfo, ob.NetworkPolicy, ob.TranslatedSrcIP, ob.TranslatedDstIP))
 
 	return nil
 }
@@ -80,4 +90,16 @@ func getInfoInReg(regMatch *ofctrl.MatchField, rng *openflow13.NXRange) (uint32,
 		return ofctrl.GetUint32ValueWithRange(regValue.Data, rng), nil
 	}
 	return regValue.Data, nil
+}
+
+func getInfoInCtNwDstField(matchers *ofctrl.Matchers) (string, error) {
+	match := matchers.GetMatchByName("NXM_NX_CT_NW_DST")
+	if match == nil {
+		return "", nil
+	}
+	regValue, ok := match.GetValue().(net.IP)
+	if !ok {
+		return "", errors.New("packet-in conntrack IP destination value cannot be retrieved from metadata")
+	}
+	return regValue.String(), nil
 }
