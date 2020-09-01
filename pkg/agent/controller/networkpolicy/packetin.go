@@ -24,10 +24,15 @@ import (
 
 	"github.com/contiv/libOpenflow/openflow13"
 	"github.com/contiv/ofnet/ofctrl"
+	"k8s.io/klog"
 
 	"github.com/vmware-tanzu/antrea/pkg/agent/openflow"
 	opsv1alpha1 "github.com/vmware-tanzu/antrea/pkg/apis/ops/v1alpha1"
 	binding "github.com/vmware-tanzu/antrea/pkg/ovs/openflow"
+)
+
+const (
+	logDir string = "/var/log/antrea/networkpolicy/"
 )
 
 func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
@@ -64,6 +69,7 @@ func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
 	ob.Component = opsv1alpha1.NetworkPolicy
 	ob.ComponentInfo = openflow.GetFlowTableName(tableID)
 
+	// Get network policy name
 	info, err := getInfoInReg(match, nil)
 	if err != nil {
 		return err
@@ -73,14 +79,29 @@ func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
 		ob.NetworkPolicy = fmt.Sprintf("%s/%s", npNamespace, npName)
 	}
 
+	// Get disposition
+	match = getMatchRegField(matchers, uint32(openflow.DispositionReg))
+	info, err = getInfoInReg(match, nil)
+	if err != nil {
+		return err
+	}
+	disposition := "Drop"
+	if info == 1 {
+		disposition = "Allow"
+	}
+
 	// Store log file
-	file, err := os.OpenFile("networkpolicy/cnp.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if _, err := os.Stat(logDir); os.IsNotExist(err) {
+		os.Mkdir(logDir, 0755)
+	}
+	file, err := os.OpenFile(logDir + "cnp.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.SetOutput(file)
-	log.Println(fmt.Sprintf("%s %s SRC: %s DEST: %s", ob.ComponentInfo, ob.NetworkPolicy, ob.TranslatedSrcIP, ob.TranslatedDstIP))
+	log.Println(fmt.Sprintf("%s %s %s SRC: %s DEST: %s", ob.ComponentInfo, ob.NetworkPolicy, disposition, ob.TranslatedSrcIP, ob.TranslatedDstIP))
 
+	klog.Info(fmt.Sprintf("%s %s %s SRC: %s DEST: %s", ob.ComponentInfo, ob.NetworkPolicy, disposition, ob.TranslatedSrcIP, ob.TranslatedDstIP))
 	return nil
 }
 
