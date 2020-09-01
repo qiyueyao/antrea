@@ -19,10 +19,11 @@ import (
 	"fmt"
 	"github.com/contiv/libOpenflow/protocol"
 	"net"
+	"log"
+	"os"
 
 	"github.com/contiv/libOpenflow/openflow13"
 	"github.com/contiv/ofnet/ofctrl"
-	"k8s.io/klog"
 
 	"github.com/vmware-tanzu/antrea/pkg/agent/openflow"
 	opsv1alpha1 "github.com/vmware-tanzu/antrea/pkg/apis/ops/v1alpha1"
@@ -30,8 +31,8 @@ import (
 )
 
 func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
-	if pktIn != nil {
-		klog.Infof("received packet")
+	if pktIn == nil {
+		return errors.New("empty packetin for CNP")
 	}
 	matchers := pktIn.GetMatches()
 	var match *ofctrl.MatchField
@@ -72,7 +73,13 @@ func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
 		ob.NetworkPolicy = fmt.Sprintf("%s/%s", npNamespace, npName)
 	}
 
-	klog.Infof(fmt.Sprintf("%s %s SRC: %s DEST: %s", ob.ComponentInfo, ob.NetworkPolicy, ob.TranslatedSrcIP, ob.TranslatedDstIP))
+	// Store log file
+	file, err := os.OpenFile("networkpolicy/cnp.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.SetOutput(file)
+	log.Println(fmt.Sprintf("%s %s SRC: %s DEST: %s", ob.ComponentInfo, ob.NetworkPolicy, ob.TranslatedSrcIP, ob.TranslatedDstIP))
 
 	return nil
 }

@@ -29,52 +29,42 @@ type PacketInHandler interface {
 const (
 	// Action explicitly output to controller.
 	ofprAction ofpPacketInReason = 1
-	// Action output to cluster network policy controller.
-	ofnpAction ofpPacketInReason = 2
-	// Name for traceflow PacketInHandler
-	tfPacketHandlerName = "traceflow"
-	// Name for CNP Logging PacketInHandler
-	npPacketHandlerName = "networkpolicy"
 	// Max packetInQueue size.
 	packetInQueueSize int = 256
 )
 
-func (c *client) RegisterPacketInHandler(packetHandlerName string, packetInHandler interface{}) {
+func NewOFReason(value uint) ofpPacketInReason{
+	return ofpPacketInReason(value)
+}
+
+func (c *client) RegisterPacketInHandler(packetHandlerReason ofpPacketInReason, packetHandlerName string, packetInHandler interface{}) {
 	handler, ok := packetInHandler.(PacketInHandler)
 	if !ok {
 		klog.Errorf("Invalid controller.")
 		return
 	}
-	c.packetInHandlers[packetHandlerName] = handler
+	if c.packetInHandlers[packetHandlerReason] == nil {
+		c.packetInHandlers[packetHandlerReason] = map[string]PacketInHandler{}
+	}
+	c.packetInHandlers[packetHandlerReason][packetHandlerName] = handler
 }
 
-func (c *client) StartPacketInHandler(stopCh <-chan struct{}) {
+func (c *client) StartPacketInHandler(packetHandlerReason ofpPacketInReason, stopCh <-chan struct{}) {
 	if len(c.packetInHandlers) == 0 {
 		return
 	}
 	// Subscribe packetin for TraceFlow with reason 1
 	ch := make(chan *ofctrl.PacketIn)
-	err := c.SubscribePacketIn(uint8(ofprAction), ch)
+	err := c.SubscribePacketIn(uint8(packetHandlerReason), ch)
 	if err != nil {
 		klog.Errorf("Subscribe PacketIn failed %+v", err)
 		return
 	}
 	packetInQueue := workqueue.NewNamed("packetIn")
-	go c.parsePacketIn(packetInQueue, stopCh, tfPacketHandlerName)
-
-	// Subscribe packetin for CNP Logging with reason 2
-	npCh := make(chan *ofctrl.PacketIn)
-	err = c.SubscribePacketIn(uint8(ofnpAction), npCh)
-	if err != nil {
-		klog.Errorf("Subscribe PacketIn failed %+v", err)
-		return
-	}
-	npPacketInQueue :=workqueue.NewNamed("cnpPacketIn")
-	go c.parsePacketIn(npPacketInQueue, stopCh, npPacketHandlerName)
+	go c.parsePacketIn(packetInQueue, packetHandlerReason)
 
 	for {
 		select {
-		// TODO: handle cnpPacketInQueue size
 		case pktIn := <-ch:
 			// Ensure that the queue doesn't grow too big. This is NOT to provide an exact guarantee.
 			if packetInQueue.Len() < packetInQueueSize {
@@ -82,8 +72,6 @@ func (c *client) StartPacketInHandler(stopCh <-chan struct{}) {
 			} else {
 				klog.Warningf("Max packetInQueue size exceeded.")
 			}
-		case npPktIn := <-npCh:
-			npPacketInQueue.Add(npPktIn)
 		case <-stopCh:
 			packetInQueue.ShutDown()
 			break
@@ -91,7 +79,7 @@ func (c *client) StartPacketInHandler(stopCh <-chan struct{}) {
 	}
 }
 
-func (c *client) parsePacketIn(packetInQueue workqueue.Interface, stopCh <-chan struct{}, packetHandlerName string) {
+func (c *client) parsePacketIn(packetInQueue workqueue.Interface, packetHandlerReason ofpPacketInReason) {
 	for {
 		obj, quit := packetInQueue.Get()
 		if quit {
@@ -103,10 +91,12 @@ func (c *client) parsePacketIn(packetInQueue workqueue.Interface, stopCh <-chan 
 			klog.Errorf("Invalid packet in data in queue, skipping.")
 			continue
 		}
-		// Use corresponding handler to handle PacketIn
-		err := c.packetInHandlers[packetHandlerName].HandlePacketIn(pktIn)
-		if err != nil {
-			klog.Errorf("PacketIn handler %s failed to process packet: %+v", packetHandlerName, err)
+		// Use corresponding handlers subscribed to the reason to handle PacketIn
+		for name, handler := range c.packetInHandlers[packetHandlerReason] {
+			err := handler.HandlePacketIn(pktIn)
+			if err != nil {
+				klog.Errorf("PacketIn handler %s failed to process packet: %+v", name, err)
+			}
 		}
 	}
 }

@@ -239,7 +239,7 @@ func run(o *Options) error {
 	go apiServer.Run(stopCh)
 
 	if features.DefaultFeatureGate.Enabled(features.Traceflow) || features.DefaultFeatureGate.Enabled(features.ClusterNetworkPolicy) {
-		go ofClient.StartPacketInHandler(stopCh)
+		go ofClient.StartPacketInHandler(openflow.NewOFReason(1), stopCh)
 	}
 
 	// Initialize flow exporter to start go routines to poll conntrack flows and export IPFIX flow records
