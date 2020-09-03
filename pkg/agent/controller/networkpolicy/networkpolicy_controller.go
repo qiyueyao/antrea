@@ -98,7 +98,9 @@ func NewNetworkPolicyController(antreaClientGetter agent.AntreaClientProvider,
 	c.fullSyncGroup.Add(3)
 
 	// Register packetInHandler
-	c.ofClient.RegisterPacketInHandler(openflow.NewOFReason(1), "networkpolicy", c)
+	c.ofClient.RegisterPacketInHandler(openflow.NewOFReason(0), "networkpolicy", c)
+	// Initiate logger for cnp audit logging
+	InitLogger()
 
 	// Use nodeName to filter resources when watching resources.
 	options := metav1.ListOptions{

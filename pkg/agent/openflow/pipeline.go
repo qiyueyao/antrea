@@ -898,7 +898,7 @@ func (c *client) conjunctionActionFlow(conjunctionID uint32, tableID binding.Tab
 			MatchPriority(ofPriority).
 			Action().LoadRegRange(int(conjReg), conjunctionID, binding.Range{0, 31}). // Traceflow.
 			Action().LoadRegRange(int(DispositionReg), 1, binding.Range{0, 31}). //CNP
-			Action().SendToController(1).
+			Action().SendToController(0).
 			Action().GotoTable(nextTable).
 			Cookie(c.cookieAllocator.Request(cookie.Policy).Raw()).
 			Done()
@@ -937,7 +937,7 @@ func (c *client) conjunctionActionDropLogFlow(conjunctionID uint32, tableID bind
 		MatchPriority(ofPriority).
 		Action().LoadRegRange(int(conjReg), conjunctionID, binding.Range{0, 31}).
 		Action().LoadRegRange(int(DispositionReg), 2, binding.Range{0, 31}). //CNP
-		Action().SendToController(1).
+		Action().SendToController(0).
 		Cookie(c.cookieAllocator.Request(cookie.Policy).Raw()).
 		Done()
 }

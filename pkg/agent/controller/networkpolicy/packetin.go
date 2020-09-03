@@ -35,6 +35,24 @@ const (
 	logDir string = "/var/log/antrea/networkpolicy/"
 )
 
+var (
+	CNPLogger    *log.Logger
+)
+
+func InitLogger() {
+	// logging file should be /var/log/antrea/networkpolicy/cnp.log
+	if _, err := os.Stat(logDir); os.IsNotExist(err) {
+		os.Mkdir(logDir, 0755)
+	}
+	file, err := os.OpenFile(logDir + "cnp.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		klog.Errorf("Failed to initiate logger %v", err)
+	}
+
+	CNPLogger = log.New(file, "CNP: ", log.Ldate|log.Ltime|log.Lshortfile)
+	klog.Info("Initiated CNPLogger for audit logging")
+}
+
 func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
 	if pktIn == nil {
 		return errors.New("empty packetin for CNP")
@@ -56,7 +74,8 @@ func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
 		}
 	}
 
-	// Collect Service DNAT.
+	// Get source destination IP and protocol
+	var obProtocol uint8
 	if pktIn.Data.Ethertype == 0x800 {
 		ipPacket, ok := pktIn.Data.Data.(*protocol.IPv4)
 		if !ok {
@@ -64,22 +83,22 @@ func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
 		}
 		ob.TranslatedSrcIP = ipPacket.NWSrc.String()
 		ob.TranslatedDstIP = ipPacket.NWDst.String()
+		obProtocol = ipPacket.Protocol
 	}
 
+	// Get table ID
 	ob.Component = opsv1alpha1.NetworkPolicy
 	ob.ComponentInfo = openflow.GetFlowTableName(tableID)
 
-	// Get network policy name
+	// Get network policy full name, CNP is not namespaced
 	info, err := getInfoInReg(match, nil)
 	if err != nil {
 		return err
 	}
 	npName, npNamespace := c.ofClient.GetPolicyFromConjunction(info)
-	if npName != "" {
-		ob.NetworkPolicy = fmt.Sprintf("%s/%s", npNamespace, npName)
-	}
+	ob.NetworkPolicy = getNetworkPolicyFullName(npName, npNamespace)
 
-	// Get disposition
+	// Get disposition Allow or Drop
 	match = getMatchRegField(matchers, uint32(openflow.DispositionReg))
 	info, err = getInfoInReg(match, nil)
 	if err != nil {
@@ -91,18 +110,16 @@ func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
 	}
 
 	// Store log file
-	if _, err := os.Stat(logDir); os.IsNotExist(err) {
-		os.Mkdir(logDir, 0755)
-	}
-	file, err := os.OpenFile(logDir + "cnp.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.SetOutput(file)
-	log.Println(fmt.Sprintf("%s %s %s SRC: %s DEST: %s", ob.ComponentInfo, ob.NetworkPolicy, disposition, ob.TranslatedSrcIP, ob.TranslatedDstIP))
-
-	klog.Info(fmt.Sprintf("%s %s %s SRC: %s DEST: %s", ob.ComponentInfo, ob.NetworkPolicy, disposition, ob.TranslatedSrcIP, ob.TranslatedDstIP))
+	CNPLogger.Printf("%s %s %s SRC: %s DEST: %s Protocol: %d", ob.ComponentInfo, ob.NetworkPolicy, disposition, ob.TranslatedSrcIP, ob.TranslatedDstIP, obProtocol)
 	return nil
+}
+
+func getNetworkPolicyFullName(npName string, npNamespace string) string {
+	if npName == "" || npNamespace == "" {
+		return npName
+	} else {
+		return fmt.Sprintf("%s/%s", npNamespace, npName)
+	}
 }
 
 func getMatchRegField(matchers *ofctrl.Matchers, regNum uint32) *ofctrl.MatchField {
