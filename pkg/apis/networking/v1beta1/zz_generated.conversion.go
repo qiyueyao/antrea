@@ -623,6 +623,7 @@ func autoConvert_v1beta1_NetworkPolicyRule_To_networking_NetworkPolicyRule(in *N
 	out.Services = *(*[]networking.Service)(unsafe.Pointer(&in.Services))
 	out.Priority = in.Priority
 	out.Action = (*v1alpha1.RuleAction)(unsafe.Pointer(in.Action))
+	out.EnableLogging = in.EnableLogging
 	return nil
 }
 
@@ -642,6 +643,7 @@ func autoConvert_networking_NetworkPolicyRule_To_v1beta1_NetworkPolicyRule(in *n
 	out.Services = *(*[]Service)(unsafe.Pointer(&in.Services))
 	out.Priority = in.Priority
 	out.Action = (*v1alpha1.RuleAction)(unsafe.Pointer(in.Action))
+	out.EnableLogging = in.EnableLogging
 	return nil
 }
 

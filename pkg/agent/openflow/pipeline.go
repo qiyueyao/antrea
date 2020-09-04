@@ -191,6 +191,7 @@ const (
 	serviceLearnReg         = endpointPortReg // Use reg4[16..18] to store endpoint selection states.
 	EgressReg       regType = 5
 	IngressReg      regType = 6
+	DispositionReg	regType = 7	// Stores Allow or Drop
 	TraceflowReg    regType = 9 // Use reg9[28..31] to store traceflow dataplaneTag.
 	// marksRegServiceNeedLB indicates a packet need to do service selection.
 	marksRegServiceNeedLB uint32 = 0b001
@@ -289,7 +290,7 @@ type client struct {
 	encapMode   config.TrafficEncapModeType
 	gatewayPort uint32 // OVSOFPort number
 	// packetInHandlers stores handler to process PacketIn event
-	packetInHandlers map[string]PacketInHandler
+	packetInHandlers map[ofpPacketInReason]map[string]PacketInHandler
 }
 
 func (c *client) GetTunnelVirtualMAC() net.HardwareAddr {
@@ -896,7 +897,8 @@ func (c *client) conjunctionActionFlow(conjunctionID uint32, tableID binding.Tab
 			MatchConjID(conjunctionID).
 			MatchPriority(ofPriority).
 			Action().LoadRegRange(int(conjReg), conjunctionID, binding.Range{0, 31}). // Traceflow.
-			Action().SendToController(2).
+			Action().LoadRegRange(int(DispositionReg), 1, binding.Range{0, 31}). //CNP
+			Action().SendToController(0).
 			Action().GotoTable(nextTable).
 			Cookie(c.cookieAllocator.Request(cookie.Policy).Raw()).
 			Done()
@@ -934,8 +936,8 @@ func (c *client) conjunctionActionDropLogFlow(conjunctionID uint32, tableID bind
 		MatchConjID(conjunctionID).
 		MatchPriority(ofPriority).
 		Action().LoadRegRange(int(conjReg), conjunctionID, binding.Range{0, 31}).
-		Action().SendToController(2).
-		Action().Drop().
+		Action().LoadRegRange(int(DispositionReg), 2, binding.Range{0, 31}). //CNP
+		Action().SendToController(0).
 		Cookie(c.cookieAllocator.Request(cookie.Policy).Raw()).
 		Done()
 }
@@ -1439,7 +1441,7 @@ func NewClient(bridgeName, mgmtAddr string, enableProxy, enableAntreaNP bool) Cl
 		policyCache:              policyCache,
 		groupCache:               sync.Map{},
 		globalConjMatchFlowCache: map[string]*conjMatchFlowContext{},
-		packetInHandlers:         map[string]PacketInHandler{},
+		packetInHandlers:         map[ofpPacketInReason]map[string]PacketInHandler{},
 	}
 	c.ofEntryOperations = c
 	c.enableProxy = enableProxy
