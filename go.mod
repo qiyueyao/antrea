@@ -22,11 +22,11 @@ require (
 	github.com/elazarl/goproxy v0.0.0-20190911111923-ecfe977594f1 // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
 	github.com/go-openapi/spec v0.19.3
-	github.com/gogo/protobuf v1.3.1
 	github.com/golang/mock v1.4.3
 	github.com/golang/protobuf v1.3.2
 	github.com/google/uuid v1.1.1
 	github.com/kevinburke/ssh_config v0.0.0-20190725054713-01f96b0aa0cd
+	github.com/natefinch/lumberjack v2.0.0+incompatible // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/common v0.4.1
 	github.com/rakelkar/gonetsh v0.0.0-20190930180311-e5c5ffe4bdf0
@@ -46,6 +46,7 @@ require (
 	golang.org/x/sys v0.0.0-20200331124033-c3d80250170d
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	google.golang.org/grpc v1.26.0
+	gopkg.in/natefinch/lumberjack.v1 v1.0.0-20140618183000-8ec9c6b748e0
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.18.4
 	k8s.io/apimachinery v0.18.4

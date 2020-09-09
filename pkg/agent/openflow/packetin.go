@@ -20,8 +20,6 @@ import (
 	"k8s.io/klog"
 )
 
-type ofpPacketInReason uint
-
 type PacketInHandler interface {
 	HandlePacketIn(pktIn *ofctrl.PacketIn) error
 }
@@ -31,11 +29,7 @@ const (
 	packetInQueueSize int = 256
 )
 
-func NewOFReason(value uint8) ofpPacketInReason{
-	return ofpPacketInReason(value)
-}
-
-func (c *client) RegisterPacketInHandler(packetHandlerReason ofpPacketInReason, packetHandlerName string, packetInHandler interface{}) {
+func (c *client) RegisterPacketInHandler(packetHandlerReason uint8, packetHandlerName string, packetInHandler interface{}) {
 	handler, ok := packetInHandler.(PacketInHandler)
 	if !ok {
 		klog.Errorf("Invalid controller.")
@@ -59,7 +53,7 @@ func (c *client) StartPacketInHandler(packetInStartedReason []uint8, stopCh <-ch
 		return
 	}
 	tfPacketInQueue := workqueue.NewNamed("traceflow")
-	go c.parsePacketIn(tfPacketInQueue, NewOFReason(packetInStartedReason[0]))
+	go c.parsePacketIn(tfPacketInQueue, packetInStartedReason[0])
 
 	// Subscribe packetin for NetworkPolicy with reason[1], using reason 0 in ovs
 	npCh := make(chan *ofctrl.PacketIn)
@@ -68,8 +62,8 @@ func (c *client) StartPacketInHandler(packetInStartedReason []uint8, stopCh <-ch
 		klog.Errorf("Subscribe NetworkPolicy PacketIn failed %+v", err)
 		return
 	}
-	npPacketInQueue := workqueue.NewNamed("networkpolicy")
-	go c.parsePacketIn(npPacketInQueue, NewOFReason(packetInStartedReason[1]))
+	npPacketInQueue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "networkpolicy")
+	go c.parsePacketInRateLimiting(npPacketInQueue, packetInStartedReason[1])
 
 	for {
 		// Prioritize traceflow over networkpolicy
@@ -101,7 +95,7 @@ func (c *client) StartPacketInHandler(packetInStartedReason []uint8, stopCh <-ch
 	}
 }
 
-func (c *client) parsePacketIn(packetInQueue workqueue.Interface, packetHandlerReason ofpPacketInReason) {
+func (c *client) parsePacketIn(packetInQueue workqueue.Interface, packetHandlerReason uint8) {
 	for {
 		obj, quit := packetInQueue.Get()
 		if quit {
@@ -120,5 +114,31 @@ func (c *client) parsePacketIn(packetInQueue workqueue.Interface, packetHandlerR
 				klog.Errorf("PacketIn handler %s failed to process packet: %+v", name, err)
 			}
 		}
+	}
+}
+
+func (c *client) parsePacketInRateLimiting(packetInQueue workqueue.RateLimitingInterface, packetHandlerReason uint8) {
+	for {
+		obj, quit := packetInQueue.Get()
+		if quit {
+			break
+		}
+		packetInQueue.Done(obj)
+		pktIn, ok := obj.(*ofctrl.PacketIn)
+		if !ok {
+			klog.Errorf("Invalid packetin data in queue, skipping.")
+			// remove rate limit tracking for invalid packetin
+			packetInQueue.Forget(obj)
+			continue
+		}
+		// Use corresponding handlers subscribed to the reason to handle PacketIn
+		for name, handler := range c.packetInHandlers[packetHandlerReason] {
+			err := handler.HandlePacketIn(pktIn)
+			if err != nil {
+				klog.Errorf("PacketIn handler %s failed to process packet: %+v", name, err)
+			}
+		}
+		// reset rate limit tracking for succeeded objects
+		packetInQueue.Forget(obj)
 	}
 }

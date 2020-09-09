@@ -17,13 +17,14 @@ package networkpolicy
 import (
 	"errors"
 	"fmt"
-	"net"
 	"log"
+	"net"
 	"os"
 
-	"github.com/contiv/libOpenflow/protocol"
 	"github.com/contiv/libOpenflow/openflow13"
+	"github.com/contiv/libOpenflow/protocol"
 	"github.com/contiv/ofnet/ofctrl"
+	"gopkg.in/natefinch/lumberjack.v1"
 	"k8s.io/klog"
 
 	"github.com/vmware-tanzu/antrea/pkg/agent/openflow"
@@ -50,7 +51,14 @@ func InitLogger() {
 	}
 
 	CNPLogger = log.New(file, "CNP: ", log.Ldate|log.Ltime|log.Lshortfile)
-	klog.Info("Initiated CNPLogger for audit logging")
+	// Use lumberjack log file rotation
+	CNPLogger.SetOutput(&lumberjack.Logger{
+		Filename:   logDir + "cnp.log",
+		MaxSize:    500,  // megabytes after which new file is created
+		MaxBackups: 3,  // number of backups
+		MaxAge:     28, //days
+	})
+	klog.V(2).Info("Initiated CNPLogger for audit logging")
 }
 
 func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {

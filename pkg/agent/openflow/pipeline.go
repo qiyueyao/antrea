@@ -290,7 +290,7 @@ type client struct {
 	encapMode   config.TrafficEncapModeType
 	gatewayPort uint32 // OVSOFPort number
 	// packetInHandlers stores handler to process PacketIn event
-	packetInHandlers map[ofpPacketInReason]map[string]PacketInHandler
+	packetInHandlers map[uint8]map[string]PacketInHandler
 }
 
 func (c *client) GetTunnelVirtualMAC() net.HardwareAddr {
@@ -1441,7 +1441,7 @@ func NewClient(bridgeName, mgmtAddr string, enableProxy, enableAntreaPolicy bool
 		policyCache:              policyCache,
 		groupCache:               sync.Map{},
 		globalConjMatchFlowCache: map[string]*conjMatchFlowContext{},
-		packetInHandlers:         map[ofpPacketInReason]map[string]PacketInHandler{},
+		packetInHandlers:         map[uint8]map[string]PacketInHandler{},
 	}
 	c.ofEntryOperations = c
 	c.enableProxy = enableProxy

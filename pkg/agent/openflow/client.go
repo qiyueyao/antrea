@@ -223,7 +223,7 @@ type Client interface {
 	GetPriorityFromConjunction(ruleID uint32) string
 
 	// RegisterPacketInHandler registers PacketIn handler to process PacketIn event.
-	RegisterPacketInHandler(packetHandlerReason ofpPacketInReason, packetHandlerName string, packetInHandler interface{})
+	RegisterPacketInHandler(packetHandlerReason uint8, packetHandlerName string, packetInHandler interface{})
 	// RegisterPacketInHandler uses SubscribePacketIn to get PacketIn message and process received
 	// packets through registered handlers.
 	StartPacketInHandler(packetInStartedReason []uint8, stopCh <-chan struct{})
