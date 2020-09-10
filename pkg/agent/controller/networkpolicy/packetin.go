@@ -24,7 +24,7 @@ import (
 	"github.com/contiv/libOpenflow/openflow13"
 	"github.com/contiv/libOpenflow/protocol"
 	"github.com/contiv/ofnet/ofctrl"
-	"gopkg.in/natefinch/lumberjack.v1"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"k8s.io/klog"
 
 	"github.com/vmware-tanzu/antrea/pkg/agent/openflow"
@@ -121,7 +121,7 @@ func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
 	}
 
 	// Store log file
-	CNPLogger.Printf("%s %s %s Priority: %s SRC: %s DEST: %s Protocol: %d", ob.ComponentInfo, ob.NetworkPolicy, disposition, ob.TranslatedSrcIP, ofPriority, ob.TranslatedDstIP, obProtocol)
+	CNPLogger.Printf("%s %s %s Priority: %s SRC: %s DEST: %s Protocol: %d", ob.ComponentInfo, ob.NetworkPolicy, disposition, ofPriority, ob.TranslatedSrcIP, ob.TranslatedDstIP, obProtocol)
 	return nil
 }
 
