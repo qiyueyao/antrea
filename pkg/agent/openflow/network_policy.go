@@ -756,11 +756,7 @@ func (c *client) calculateActionFlowChangesForRule(rule *types.PolicyRule) *poli
 		// Install action flows.
 		var actionFlows []binding.Flow
 		if rule.IsAntreaNetworkPolicyRule() && *rule.Action == secv1alpha1.RuleActionDrop {
-			if rule.EnableLogging {
-				actionFlows = append(actionFlows, c.conjunctionActionDropLogFlow(ruleID, ruleTable.GetID(), rule.Priority))
-			} else {
-				actionFlows = append(actionFlows, c.conjunctionActionDropFlow(ruleID, ruleTable.GetID(), rule.Priority))
-			}
+			actionFlows = append(actionFlows, c.conjunctionActionDropFlow(ruleID, ruleTable.GetID(), rule.Priority, rule.EnableLogging))
 		} else {
 			actionFlows = append(actionFlows, c.conjunctionActionFlow(ruleID, ruleTable.GetID(), dropTable.GetNext(), rule.Priority, rule.EnableLogging))
 		}
@@ -1010,11 +1006,10 @@ func (c *client) GetPolicyFromConjunction(ruleID uint32) (string, string) {
 func (c *client) GetPriorityFromConjunction(ruleID uint32) string {
 	conjunction := c.getPolicyRuleConjunction(ruleID)
 	priorities := conjunction.ActionFlowPriorities()
-	priorityStr := ""
 	if len(priorities) > 0 {
-		priorityStr = priorities[len(priorities)-1]
+		return priorities[0]
 	}
-	return priorityStr
+	return ""
 }
 
 // UninstallPolicyRuleFlows removes the Openflow entry relevant to the specified NetworkPolicy rule.

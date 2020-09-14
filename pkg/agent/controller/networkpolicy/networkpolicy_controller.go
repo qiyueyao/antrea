@@ -69,7 +69,7 @@ type Controller struct {
 	// reconciler provides interfaces to reconcile the desired state of
 	// NetworkPolicy rules with the actual state of Openflow entries.
 	reconciler Reconciler
-	// include openflow client to register packetin for logging
+	// ofClient registers packetin for Antrea Policy logging.
 	ofClient openflow.Client
 
 	networkPolicyWatcher  *watcher
@@ -98,7 +98,7 @@ func NewNetworkPolicyController(antreaClientGetter agent.AntreaClientProvider,
 	c.fullSyncGroup.Add(3)
 
 	// Register packetInHandler
-	c.ofClient.RegisterPacketInHandler(0, "networkpolicy", c)
+	c.ofClient.RegisterPacketInHandler(1, "networkpolicy", c)
 	// Initiate logger for cnp audit logging
 	InitLogger()
 

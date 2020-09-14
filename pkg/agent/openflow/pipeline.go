@@ -211,7 +211,16 @@ const (
 	gatewayCTMark = 0x20
 	snatCTMark    = 0x40
 	serviceCTMark = 0x21
+
+	// disposition marks the flow action stored in DispositionReg
+	DispositionAllow uint32 = 1
+	DispositionDrop  uint32 = 2
 )
+
+var DispositionToString = map[uint32]string{
+	DispositionAllow: "Allow",
+	DispositionDrop: "Drop",
+}
 
 var (
 	// ofPortMarkRange takes the 16th bit of register marksReg to indicate if the ofPort number of an interface
@@ -884,10 +893,7 @@ func (c *client) conjunctionActionFlow(conjunctionID uint32, tableID binding.Tab
 		ofPriority = *priority
 	}
 	conjReg := IngressReg
-	if tableID == EgressRuleTable   {
-		conjReg = EgressReg
-	}
-	for _, table := range GetCNPEgressTables() {
+	for _, table := range append(GetCNPEgressTables(), EgressRuleTable) {
 		if tableID == table {
 			conjReg = EgressReg
 		}
@@ -897,8 +903,8 @@ func (c *client) conjunctionActionFlow(conjunctionID uint32, tableID binding.Tab
 			MatchConjID(conjunctionID).
 			MatchPriority(ofPriority).
 			Action().LoadRegRange(int(conjReg), conjunctionID, binding.Range{0, 31}). // Traceflow.
-			Action().LoadRegRange(int(DispositionReg), 1, binding.Range{0, 31}). //CNP
-			Action().SendToController(0).
+			Action().LoadRegRange(int(DispositionReg), DispositionAllow, binding.Range{0, 31}). //Logging
+			Action().SendToController(1).
 			Action().GotoTable(nextTable).
 			Cookie(c.cookieAllocator.Request(cookie.Policy).Raw()).
 			Done()
@@ -914,32 +920,32 @@ func (c *client) conjunctionActionFlow(conjunctionID uint32, tableID binding.Tab
 }
 
 // conjunctionActionDropFlow generates the flow to drop traffic if policyRuleConjunction ID is matched.
-func (c *client) conjunctionActionDropFlow(conjunctionID uint32, tableID binding.TableIDType, priority *uint16) binding.Flow {
+func (c *client) conjunctionActionDropFlow(conjunctionID uint32, tableID binding.TableIDType, priority *uint16, enableLogging bool) binding.Flow {
 	ofPriority := *priority
-	return c.pipeline[tableID].BuildFlow(ofPriority).MatchProtocol(binding.ProtocolIP).
-		MatchConjID(conjunctionID).
-		MatchPriority(ofPriority).
-		Action().Drop().
-		Cookie(c.cookieAllocator.Request(cookie.Policy).Raw()).
-		Done()
-}
-
-// conjunctionActionDropLogFlow generates the flow to drop traffic if policyRuleConjunction ID is matched.
-func (c *client) conjunctionActionDropLogFlow(conjunctionID uint32, tableID binding.TableIDType, priority *uint16) binding.Flow {
-	ofPriority := *priority
-	// Load register with conjunctionID for logging.
 	conjReg := IngressReg
-	if tableID == EgressDefaultTable {
-		conjReg = EgressReg
+	for _, table := range append(GetCNPEgressTables(), EgressDefaultTable) {
+		if tableID == table {
+			conjReg = EgressReg
+		}
 	}
-	return c.pipeline[tableID].BuildFlow(ofPriority).MatchProtocol(binding.ProtocolIP).
-		MatchConjID(conjunctionID).
-		MatchPriority(ofPriority).
-		Action().LoadRegRange(int(conjReg), conjunctionID, binding.Range{0, 31}).
-		Action().LoadRegRange(int(DispositionReg), 2, binding.Range{0, 31}). //CNP
-		Action().SendToController(0).
-		Cookie(c.cookieAllocator.Request(cookie.Policy).Raw()).
-		Done()
+	if enableLogging {
+		return c.pipeline[tableID].BuildFlow(ofPriority).MatchProtocol(binding.ProtocolIP).
+			MatchConjID(conjunctionID).
+			MatchPriority(ofPriority).
+			Action().LoadRegRange(int(conjReg), conjunctionID, binding.Range{0, 31}). // Logging
+			Action().LoadRegRange(int(DispositionReg), DispositionDrop, binding.Range{0, 31}). //Logging
+			Action().SendToController(1).
+			Cookie(c.cookieAllocator.Request(cookie.Policy).Raw()).
+			Done()
+	} else {
+		return c.pipeline[tableID].BuildFlow(ofPriority).MatchProtocol(binding.ProtocolIP).
+			MatchConjID(conjunctionID).
+			MatchPriority(ofPriority).
+			Action().Drop().
+			Cookie(c.cookieAllocator.Request(cookie.Policy).Raw()).
+			Done()
+	}
+
 }
 
 func (c *client) Disconnect() error {

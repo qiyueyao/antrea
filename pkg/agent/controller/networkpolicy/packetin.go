@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"os"
 
 	"github.com/contiv/libOpenflow/openflow13"
@@ -40,23 +39,34 @@ var (
 	CNPLogger    *log.Logger
 )
 
+type logInfo struct {
+	tableName string
+	npName string
+	disposition string
+	ofPriority string
+	srcIP string
+	destIP string
+	protocolStr string
+}
+
 func InitLogger() {
 	// logging file should be /var/log/antrea/networkpolicy/cnp.log
 	if _, err := os.Stat(logDir); os.IsNotExist(err) {
 		os.Mkdir(logDir, 0755)
 	}
-	file, err := os.OpenFile(logDir + "cnp.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	file, err := os.OpenFile(logDir + "np.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		klog.Errorf("Failed to initiate logger %v", err)
 	}
 
-	CNPLogger = log.New(file, "CNP: ", log.Ldate|log.Ltime|log.Lshortfile)
+	CNPLogger = log.New(file, "", log.Lshortfile|log.Ldate|log.Ltime)
 	// Use lumberjack log file rotation
 	CNPLogger.SetOutput(&lumberjack.Logger{
-		Filename:   logDir + "cnp.log",
+		Filename:   logDir + "np.log",
 		MaxSize:    500,  // megabytes after which new file is created
 		MaxBackups: 3,  // number of backups
 		MaxAge:     28, //days
+		Compress:   true,
 	})
 	klog.V(2).Info("Initiated CNPLogger for audit logging")
 }
@@ -65,63 +75,23 @@ func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
 	if pktIn == nil {
 		return errors.New("empty packetin for CNP")
 	}
-	matchers := pktIn.GetMatches()
-	var match *ofctrl.MatchField
-	tableID := binding.TableIDType(pktIn.TableId)
 
-	ob := new(opsv1alpha1.Observation)
-	// Get ingress/egress reg
-	for _, table := range openflow.GetCNPEgressTables() {
-		if tableID == table {
-			match = getMatchRegField(matchers, uint32(openflow.EgressReg))
-		}
-	}
-	for _, table := range openflow.GetCNPIngressTables() {
-		if tableID == table {
-			match = getMatchRegField(matchers, uint32(openflow.IngressReg))
-		}
-	}
+	ob := new(logInfo)
 
-	// Get source destination IP and protocol
-	var obProtocol uint8
-	if pktIn.Data.Ethertype == 0x800 {
-		ipPacket, ok := pktIn.Data.Data.(*protocol.IPv4)
-		if !ok {
-			return errors.New("invalid IPv4 packet")
-		}
-		ob.TranslatedSrcIP = ipPacket.NWSrc.String()
-		ob.TranslatedDstIP = ipPacket.NWDst.String()
-		obProtocol = ipPacket.Protocol
-	}
-
-	// Get table ID
-	ob.Component = opsv1alpha1.NetworkPolicy
-	ob.ComponentInfo = openflow.GetFlowTableName(tableID)
-
-	// Get network policy full name, CNP is not namespaced
-	info, err := getInfoInReg(match, nil)
+	// Get network policy log info
+	err := getNetworkPolicyInfo(pktIn, c, ob)
 	if err != nil {
 		return err
 	}
-	npName, npNamespace := c.ofClient.GetPolicyFromConjunction(info)
-	ob.NetworkPolicy = getNetworkPolicyFullName(npName, npNamespace)
 
-	// Get OF priority of the conjunction
-	ofPriority := c.ofClient.GetPriorityFromConjunction(info)
-
-	// Get disposition Allow or Drop
-	match = getMatchRegField(matchers, uint32(openflow.DispositionReg))
-	info, err = getInfoInReg(match, nil)
+	// Get packet log info
+	err = getPacketInfo(pktIn, ob)
 	if err != nil {
 		return err
-	}
-	disposition := "Drop"
-	if info == 1 {
-		disposition = "Allow"
 	}
 
 	// Store log file
-	CNPLogger.Printf("%s %s %s Priority: %s SRC: %s DEST: %s Protocol: %d", ob.ComponentInfo, ob.NetworkPolicy, disposition, ofPriority, ob.TranslatedSrcIP, ob.TranslatedDstIP, obProtocol)
+	CNPLogger.Printf("%s %s %s Priority: %s SRC: %s DEST: %s Protocol: %s", ob.tableName, ob.npName, ob.disposition, ob.ofPriority, ob.srcIP, ob.destIP, ob.protocolStr)
 	return nil
 }
 
@@ -140,7 +110,7 @@ func getMatchRegField(matchers *ofctrl.Matchers, regNum uint32) *ofctrl.MatchFie
 func getInfoInReg(regMatch *ofctrl.MatchField, rng *openflow13.NXRange) (uint32, error) {
 	regValue, ok := regMatch.GetValue().(*ofctrl.NXRegister)
 	if !ok {
-		return 0, errors.New("register value cannot be got")
+		return 0, errors.New("register value cannot be retrieved")
 	}
 	if rng != nil {
 		return ofctrl.GetUint32ValueWithRange(regValue.Data, rng), nil
@@ -148,14 +118,56 @@ func getInfoInReg(regMatch *ofctrl.MatchField, rng *openflow13.NXRange) (uint32,
 	return regValue.Data, nil
 }
 
-func getInfoInCtNwDstField(matchers *ofctrl.Matchers) (string, error) {
-	match := matchers.GetMatchByName("NXM_NX_CT_NW_DST")
-	if match == nil {
-		return "", nil
+func getNetworkPolicyInfo(pktIn *ofctrl.PacketIn, c *Controller, ob *logInfo) error {
+	matchers := pktIn.GetMatches()
+	var match *ofctrl.MatchField
+	// Get table name
+	tableID := binding.TableIDType(pktIn.TableId)
+	ob.tableName = openflow.GetFlowTableName(tableID)
+
+	// Get ingress/egress reg
+	for _, table := range openflow.GetCNPEgressTables() {
+		if tableID == table {
+			match = getMatchRegField(matchers, uint32(openflow.EgressReg))
+		}
 	}
-	regValue, ok := match.GetValue().(net.IP)
-	if !ok {
-		return "", errors.New("packet-in conntrack IP destination value cannot be retrieved from metadata")
+	for _, table := range openflow.GetCNPIngressTables() {
+		if tableID == table {
+			match = getMatchRegField(matchers, uint32(openflow.IngressReg))
+		}
 	}
-	return regValue.String(), nil
+
+	// Get network policy full name, CNP is not namespaced
+	info, err := getInfoInReg(match, nil)
+	if err != nil {
+		return err
+	}
+	npName, npNamespace := c.ofClient.GetPolicyFromConjunction(info)
+	ob.npName = getNetworkPolicyFullName(npName, npNamespace)
+
+	// Get OF priority of the conjunction
+	ob.ofPriority = c.ofClient.GetPriorityFromConjunction(info)
+
+	// Get disposition Allow or Drop
+	match = getMatchRegField(matchers, uint32(openflow.DispositionReg))
+	info, err = getInfoInReg(match, nil)
+	if err != nil {
+		return err
+	}
+	ob.disposition = openflow.DispositionToString[info]
+	return nil
+}
+
+func getPacketInfo(pktIn *ofctrl.PacketIn, ob *logInfo) error {
+	if pktIn.Data.Ethertype == opsv1alpha1.EtherTypeIPv4 {
+		ipPacket, ok := pktIn.Data.Data.(*protocol.IPv4)
+		if !ok {
+			return errors.New("invalid IPv4 packet")
+		}
+		// Get source destination IP and protocol
+		ob.srcIP = ipPacket.NWSrc.String()
+		ob.destIP = ipPacket.NWDst.String()
+		ob.protocolStr = opsv1alpha1.ProtocolsToString[int32(ipPacket.Protocol)]
+	}
+	return nil
 }

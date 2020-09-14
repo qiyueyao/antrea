@@ -240,7 +240,7 @@ func run(o *Options) error {
 	go apiServer.Run(stopCh)
 
 	if features.DefaultFeatureGate.Enabled(features.Traceflow) || features.DefaultFeatureGate.Enabled(features.AntreaPolicy) {
-		packetInReason := []uint8{1, 0}
+		packetInReason := []uint8{1}
 		go ofClient.StartPacketInHandler(packetInReason, stopCh)
 	}
 
