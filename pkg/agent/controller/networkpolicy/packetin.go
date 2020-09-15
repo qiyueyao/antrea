@@ -46,6 +46,7 @@ type logInfo struct {
 	ofPriority string
 	srcIP string
 	destIP string
+	pckLength uint16
 	protocolStr string
 }
 
@@ -59,7 +60,7 @@ func InitLogger() {
 		klog.Errorf("Failed to initiate logger %v", err)
 	}
 
-	CNPLogger = log.New(file, "", log.Lshortfile|log.Ldate|log.Ltime)
+	CNPLogger = log.New(file, "", log.Ldate|log.Lmicroseconds)
 	// Use lumberjack log file rotation
 	CNPLogger.SetOutput(&lumberjack.Logger{
 		Filename:   logDir + "np.log",
@@ -91,7 +92,7 @@ func (c *Controller) HandlePacketIn(pktIn *ofctrl.PacketIn) error {
 	}
 
 	// Store log file
-	CNPLogger.Printf("%s %s %s Priority: %s SRC: %s DEST: %s Protocol: %s", ob.tableName, ob.npName, ob.disposition, ob.ofPriority, ob.srcIP, ob.destIP, ob.protocolStr)
+	CNPLogger.Printf("%s %s %s %s SRC: %s DEST: %s %d %s", ob.tableName, ob.npName, ob.disposition, ob.ofPriority, ob.srcIP, ob.destIP, ob.pckLength, ob.protocolStr)
 	return nil
 }
 
@@ -167,6 +168,7 @@ func getPacketInfo(pktIn *ofctrl.PacketIn, ob *logInfo) error {
 		// Get source destination IP and protocol
 		ob.srcIP = ipPacket.NWSrc.String()
 		ob.destIP = ipPacket.NWDst.String()
+		ob.pckLength = ipPacket.Length
 		ob.protocolStr = opsv1alpha1.ProtocolsToString[int32(ipPacket.Protocol)]
 	}
 	return nil
