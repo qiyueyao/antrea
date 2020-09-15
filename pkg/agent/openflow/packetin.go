@@ -27,6 +27,9 @@ type PacketInHandler interface {
 const (
 	// Max packetInQueue size.
 	packetInQueueSize int = 256
+	// PacketIn reasons
+	PacketInReasonTF uint8 = 1
+	PacketInReasonNP uint8 = 0
 )
 
 func (c *client) RegisterPacketInHandler(packetHandlerReason uint8, packetHandlerName string, packetInHandler interface{}) {
@@ -46,27 +49,55 @@ func (c *client) StartPacketInHandler(packetInStartedReason []uint8, stopCh <-ch
 		return
 	}
 	// Subscribe packetin for with reason 1
-	ch := make(chan *ofctrl.PacketIn)
-	err := c.SubscribePacketIn(packetInStartedReason[0], ch)
+	// Subscribe packetin for TraceFlow with reason[0], using reason 1 in ovs
+	tfCh := make(chan *ofctrl.PacketIn)
+	err := c.SubscribePacketIn(packetInStartedReason[0], tfCh)
 	if err != nil {
-		klog.Errorf("Subscribe PacketIn failed %+v", err)
+		klog.Errorf("Subscribe Traceflow PacketIn failed %+v", err)
 		return
 	}
-	packetInQueue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "tf np")
-	go c.parsePacketInRateLimiting(packetInQueue, packetInStartedReason[0])
+	tfPacketInQueue := workqueue.NewNamed("traceflow")
+	go c.parsePacketIn(tfPacketInQueue, packetInStartedReason[0])
+
+	// Subscribe packetin for NetworkPolicy with reason[1], using reason 0 in ovs
+	npCh := make(chan *ofctrl.PacketIn)
+	err = c.SubscribePacketIn(packetInStartedReason[1], npCh)
+	if err != nil {
+		klog.Errorf("Subscribe NetworkPolicy PacketIn failed %+v", err)
+		return
+	}
+	npPacketInQueue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "networkpolicy")
+	go c.parsePacketInRateLimiting(npPacketInQueue, packetInStartedReason[1])
 
 	for {
+		// Prioritize traceflow over networkpolicy
 		select {
-		case pktIn := <-ch:
+		case tfPktIn := <-tfCh:
 			// Ensure that the queue doesn't grow too big. This is NOT to provide an exact guarantee.
-			if packetInQueue.Len() < packetInQueueSize {
-				packetInQueue.Add(pktIn)
+			if tfPacketInQueue.Len() < packetInQueueSize {
+				tfPacketInQueue.Add(tfPktIn)
 			} else {
 				klog.Warningf("Max packetInQueue size exceeded.")
 			}
+			continue
+		default:
+		}
+		select {
+		case tfPktIn := <-tfCh:
+			// Ensure that the queue doesn't grow too big. This is NOT to provide an exact guarantee.
+			if tfPacketInQueue.Len() < packetInQueueSize {
+				tfPacketInQueue.Add(tfPktIn)
+			} else {
+				klog.Warningf("Max packetInQueue size exceeded.")
+			}
+			continue
+		case npPktIn := <-npCh:
+			npPacketInQueue.Add(npPktIn)
+			continue
 		case <-stopCh:
-			packetInQueue.ShutDown()
-			break
+			tfPacketInQueue.ShutDown()
+			npPacketInQueue.ShutDown()
+			return
 		}
 	}
 }

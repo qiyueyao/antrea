@@ -78,7 +78,7 @@ type rule struct {
 	PolicyName string
 	// PolicyNamespace is empty for ClusterNetworkPolicy.
 	PolicyNamespace string
-	// EnableLogging is a boolean indicating if log for CNP. False for NP.
+	// EnableLogging is a boolean indicating whether logging is required for CNP. Always false for K8s NetworkPolicy.
 	EnableLogging bool
 }
 

@@ -98,8 +98,8 @@ func NewNetworkPolicyController(antreaClientGetter agent.AntreaClientProvider,
 	c.fullSyncGroup.Add(3)
 
 	// Register packetInHandler
-	c.ofClient.RegisterPacketInHandler(1, "networkpolicy", c)
-	// Initiate logger for cnp audit logging
+	c.ofClient.RegisterPacketInHandler(openflow.PacketInReasonNP, "networkpolicy", c)
+	// Initiate logger for CNP audit logging
 	InitLogger()
 
 	// Use nodeName to filter resources when watching resources.
