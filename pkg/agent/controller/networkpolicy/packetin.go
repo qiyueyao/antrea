@@ -33,6 +33,7 @@ import (
 
 const (
 	logDir string = "/var/log/antrea/networkpolicy/"
+	logfileName string = "np.log"
 )
 
 var (
@@ -51,11 +52,11 @@ type logInfo struct {
 }
 
 func InitLogger() {
-	// logging file should be /var/log/antrea/networkpolicy/cnp.log
+	// logging file should be /var/log/antrea/networkpolicy/np.log
 	if _, err := os.Stat(logDir); os.IsNotExist(err) {
 		os.Mkdir(logDir, 0755)
 	}
-	file, err := os.OpenFile(logDir + "np.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	file, err := os.OpenFile(logDir + logfileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		klog.Errorf("Failed to initiate logger %v", err)
 	}
@@ -63,7 +64,7 @@ func InitLogger() {
 	CNPLogger = log.New(file, "", log.Ldate|log.Lmicroseconds)
 	// Use lumberjack log file rotation
 	CNPLogger.SetOutput(&lumberjack.Logger{
-		Filename:   logDir + "np.log",
+		Filename:   logDir + logfileName,
 		MaxSize:    500,  // megabytes after which new file is created
 		MaxBackups: 3,  // number of backups
 		MaxAge:     28, //days

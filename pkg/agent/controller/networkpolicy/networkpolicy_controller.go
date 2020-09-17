@@ -98,7 +98,9 @@ func NewNetworkPolicyController(antreaClientGetter agent.AntreaClientProvider,
 	c.fullSyncGroup.Add(3)
 
 	// Register packetInHandler
-	c.ofClient.RegisterPacketInHandler(openflow.PacketInReasonNP, "networkpolicy", c)
+	if c.ofClient != nil {
+		c.ofClient.RegisterPacketInHandler(openflow.PacketInReasonNP, "networkpolicy", c)
+	}
 	// Initiate logger for CNP audit logging
 	InitLogger()
 
