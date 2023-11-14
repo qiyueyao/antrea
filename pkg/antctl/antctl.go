@@ -301,6 +301,32 @@ $ antctl get podmulticaststats pod -n namespace`,
 			transformedResponse: reflect.TypeOf(addressgroup.Response{}),
 		},
 		{
+			use:     "conflictingpolicyrules",
+			aliases: []string{"conflictingpolicyrules"},
+			short:   "Print potentially conflicting policy rules.",
+			long:    "Print potentially conflicting policy rules which are created with conflicting actions at the same priority to avoid nondeterministic rule enforcement results.",
+			example: `  Get potentially conflicting policy rules
+  $ antctl get conflictingpolicyrules
+`,
+			commandGroup: get,
+			controllerEndpoint: &endpoint{
+				resourceEndpoint: &resourceEndpoint{
+					groupVersionResource: &cpv1beta.NetworkPolicyVersionResource,
+					supportSorting:       true,
+				},
+				addonTransform: networkpolicy.Transform,
+			},
+			//controllerEndpoint: &endpoint{
+			//	nonResourceEndpoint: &nonResourceEndpoint{
+			//		path:       "/conflictingpolicyrules",
+			//		params:     []flagInfo{},
+			//		outputType: multiple,
+			//	},
+			//	addonTransform: networkpolicy.Transform,
+			//},
+			transformedResponse: reflect.TypeOf(networkpolicy.Response{}),
+		},
+		{
 			use:     "controllerinfo",
 			aliases: []string{"controllerinfos", "ci"},
 			short:   "Print Antrea controller's basic information",
