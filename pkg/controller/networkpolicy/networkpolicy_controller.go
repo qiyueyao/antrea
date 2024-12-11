@@ -769,15 +769,24 @@ func (n *NetworkPolicyController) processNetworkPolicy(np *networkingv1.NetworkP
 		}
 	}
 
+	// Set EnableLogging field for the given rule.
+	configureEnableLogging := func(originalRule controlplane.NetworkPolicyRule) controlplane.NetworkPolicyRule {
+		logConfiguredRule := originalRule
+		if enableLogging {
+			logConfiguredRule.EnableLogging = enableLogging
+		}
+		return logConfiguredRule
+	}
+
 	// If ingress isolation is specified explicitly and there's no ingress rule, append a deny-all ingress rule.
 	// See https://kubernetes.io/docs/concepts/services-networking/network-policies/#default-deny-all-ingress-traffic
 	if ingressIsolated && !ingressRuleExists {
-		rules = append(rules, denyAllIngressRule)
+		rules = append(rules, configureEnableLogging(denyAllIngressRule))
 	}
 	// If egress isolation is specified explicitly and there's no egress rule, append a deny-all egress rule.
 	// See https://kubernetes.io/docs/concepts/services-networking/network-policies/#default-deny-all-egress-traffic
 	if egressIsolated && !egressRuleExists {
-		rules = append(rules, denyAllEgressRule)
+		rules = append(rules, configureEnableLogging(denyAllEgressRule))
 	}
 
 	internalNetworkPolicy := &antreatypes.NetworkPolicy{

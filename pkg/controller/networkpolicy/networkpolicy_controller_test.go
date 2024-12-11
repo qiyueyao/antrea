@@ -2008,6 +2008,41 @@ func TestProcessNetworkPolicy(t *testing.T) {
 			expectedAddressGroups:   0,
 		},
 		{
+			name: "default-deny-ingress-enable-logging",
+			existingObjects: []runtime.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        "nsA",
+						Annotations: map[string]string{"networkpolicy.antrea.io/enable-logging": "true"},
+					},
+				},
+			},
+			inputPolicy: &networkingv1.NetworkPolicy{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "nsA", Name: "npC", UID: "uidC"},
+				Spec: networkingv1.NetworkPolicySpec{
+					PodSelector: metav1.LabelSelector{},
+					PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+				},
+			},
+			expectedPolicy: &antreatypes.NetworkPolicy{
+				UID:  "uidC",
+				Name: "uidC",
+				SourceRef: &controlplane.NetworkPolicyReference{
+					Type:      controlplane.K8sNetworkPolicy,
+					Namespace: "nsA",
+					Name:      "npC",
+					UID:       "uidC",
+				},
+				Rules: []controlplane.NetworkPolicyRule{{
+					Direction:     controlplane.DirectionIn,
+					EnableLogging: true,
+				}},
+				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &metav1.LabelSelector{}, nil, nil, nil).NormalizedName)},
+			},
+			expectedAppliedToGroups: 1,
+			expectedAddressGroups:   0,
+		},
+		{
 			name: "default-deny-egress",
 			inputPolicy: &networkingv1.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "nsA", Name: "npA", UID: "uidA"},
